@@ -1,0 +1,1242 @@
+IDLE MOMENTS BLOG APP - BEHAVIOR-ONLY SPEC
+
+Purpose
+This document describes the complete page-by-page and component-by-component behavior of the current Idle Moments blog/forum application. It intentionally excludes visual styling instructions so another model or designer can recreate the UI from scratch with a new visual direction.
+
+Application Summary
+Idle Moments is a hobby-focused blog and discussion app. Users can browse a feed of posts, browse topic threads, read individual post details, reply to comments, star posts or threads, create/edit posts, edit profile information, register/login/recover an account, and view profile/admin pages. The current app is a front-end prototype with mock auth state, fallback data, and local-only form behaviors in most places.
+
+Global Routing
+- The app is a React single-page app using BrowserRouter.
+- The router basename is derived from Vite's BASE_URL. In the current deployment, BASE_URL is "/frontend/", so all browser routes should work under "/frontend".
+- The root path "/" redirects to "/links".
+- Every routed page renders inside a global page shell that includes the site navigation above the page content.
+
+Defined Routes
+- "/" redirects to "/links".
+- "/links" displays a page index linking to every route.
+- "/home" displays the public landing page.
+- "/feed" displays the post feed.
+- "/threads" displays the list of all threads.
+- "/view-thread" displays a single thread with its posts.
+- "/post-details" displays a public/non-owner post detail page.
+- "/my-post-details" displays the current user's owned post detail page.
+- "/my-profile" displays the current user's profile and posts.
+- "/user-profile" displays another user's profile and posts.
+- "/admin-profile" displays the current user's profile/posts plus admin list editing controls.
+- "/create-post" displays the create post form.
+- "/edit-post" displays the edit post form.
+- "/edit-profile" displays the edit profile form.
+- "/login" displays the login form.
+- "/register" displays the registration form.
+- "/forgot-password" displays the account recovery form.
+- "/new-password" displays the change password form.
+
+Mock Auth State
+- The app has a mock logged-in user:
+  - username: "AndMarsh"
+  - avatarVariant: "blue"
+- All routes are treated as logged in except "/feed".
+- On "/feed" only, the nav renders in logged-out mode for testing.
+- No actual auth API is wired in the current front end.
+
+Global Navigation Component
+Component: SiteNav
+
+Inputs
+- isLoggedIn: boolean.
+- user: object or null.
+- user.username is used for profile link accessibility labels and avatar fallback text.
+- user.avatarVariant is used to choose the avatar variant.
+
+Always Visible Navigation Behavior
+- The brand text is "Idle Moments".
+- Clicking the brand navigates to "/home".
+- Desktop navigation always includes:
+  - Feed -> "/feed"
+  - Threads -> "/threads"
+- If logged in:
+  - Include Write -> "/create-post".
+  - Show a profile avatar link to "/my-profile".
+  - Avatar link label should identify opening the user's profile.
+- If logged out:
+  - Include Login -> "/login".
+  - Do not show Write.
+  - Do not show profile avatar.
+
+Small-Screen Drawer Behavior
+- At the small-screen breakpoint, desktop links are replaced by a hamburger button.
+- Hamburger button:
+  - aria-label is "Open navigation menu" when closed.
+  - aria-label is "Close navigation menu" when open.
+  - aria-expanded reflects open state.
+  - aria-controls points to the drawer.
+- Clicking the hamburger opens/closes the drawer.
+- Drawer contents when logged in:
+  - Profile avatar link at the top, navigating to "/my-profile".
+  - Feed -> "/feed".
+  - Threads -> "/threads".
+  - Write -> "/create-post".
+- Drawer contents when logged out:
+  - No profile avatar.
+  - Feed -> "/feed".
+  - Threads -> "/threads".
+  - Login -> "/login".
+- Drawer has a close button with aria-label "Close navigation menu".
+- Clicking any drawer link closes the drawer.
+- Clicking the backdrop closes the drawer.
+- Pressing Escape closes the drawer.
+- When drawer is open, document body scrolling is disabled.
+- Drawer unmounts after a short closing delay so close animation can finish.
+- On route change, the drawer closes automatically.
+
+Shared Data Model: Post Preview
+Post preview objects should support:
+- id: string.
+- title: string.
+- authorUsername: string.
+- stars: number.
+- comments: number.
+- excerpt: string.
+- publishedAt: string or parseable date.
+
+Fallback Post Preview Data
+- There are three fallback posts:
+  - "How to Live like a Robot" by "robotfan42", 18 stars, 6 comments.
+  - "How to Float in a Pool" by "poolnoodle", 9 stars, 3 comments.
+  - "Introspection for Adults with Autism" by "thoughtful_dev", 27 stars, 11 comments.
+- All fallback posts have excerpts and timestamp strings.
+
+Post Normalization Behavior
+- A posts API response may be:
+  - an array,
+  - an object with posts,
+  - an object with data,
+  - an object with items.
+- Each post may use different field names:
+  - id or postId.
+  - title or name.
+  - authorUsername, username, author.username, or author.name.
+  - excerpt, summary, body, content, or description.
+  - publishedAt, createdAt, timestamp, or date.
+  - stars, starCount, or likes.
+  - comments, commentCount, replies, or replyCount.
+- Invalid posts without a title are ignored.
+- If no valid posts exist, use fallback posts.
+- Missing author should display as "unknown".
+- Missing excerpt or publishedAt should display as empty text.
+- Number fields should be coerced to numbers.
+
+Timestamp Formatting
+- If timestamp is empty, display empty string.
+- If timestamp cannot be parsed as a Date, display the original string.
+- If parseable, format in US short numeric date/time:
+  - month numeric
+  - day numeric
+  - two-digit year
+  - hour numeric
+  - minute two-digit
+
+Shared Hook: usePosts
+Inputs
+- endpoint: string or falsy.
+- options.fallback: optional fallback post array.
+
+Behavior
+- If endpoint is falsy:
+  - posts becomes fallback.
+  - loading becomes false.
+  - error becomes null.
+- If endpoint exists:
+  - loading starts true.
+  - error starts null.
+  - fetch endpoint.
+  - If response is not ok, throw an error.
+  - Parse JSON.
+  - Normalize posts and set posts.
+  - On failure, set posts to fallback and set error.
+  - Always set loading false when finished.
+- Ignore async results after component unmount.
+- The current UI generally does not render loading/error states, but the hook exposes them.
+
+Shared Component: StarToggleButton
+Inputs
+- count: number to display next to star.
+- className: optional class list.
+- label: accessible item label.
+- defaultStarred: boolean, default true.
+- size: icon size, default 16.
+
+Behavior
+- Renders a button.
+- Maintains local isStarred state.
+- aria-pressed reflects isStarred.
+- aria-label is:
+  - "Unstar {label}" when starred.
+  - "Star {label}" when unstarred.
+- title matches the aria-label.
+- Clicking toggles isStarred.
+- The numeric count does not change when toggled.
+- After click, the button blurs itself so hover/focus visual state does not stick.
+- Icon fill is full when starred and outline-only when unstarred.
+
+Shared Component: PostList
+Inputs
+- posts: array of normalized post preview objects.
+- getPostHref: optional function, defaults to returning "/post-details".
+
+Behavior
+- Renders one PostPreview per post.
+- Each PostPreview receives:
+  - key = post.id.
+  - post.
+  - to = getPostHref(post).
+
+Shared Component: PostPreview
+Inputs
+- post: post preview object.
+- to: destination path, default "/post-details".
+
+Behavior
+- Renders a clickable post card.
+- The clickable destination should cover the full highlighted/clickable card area, excluding interactive metric controls.
+- Card content:
+  - Title.
+  - Author username prefixed with "@".
+  - Excerpt.
+  - Published timestamp.
+- Footer metrics:
+  - StarToggleButton for the post.
+  - Comment metric displaying comment count with a comment icon or equivalent.
+- Star button remains independently clickable and should not navigate to the post.
+- Comment count is informational and currently not a link.
+
+Shared Component: PostForm
+Used by "/create-post" and "/edit-post".
+
+Inputs
+- title: form heading.
+- submitLabel: submit button text.
+- initialValues: optional object with title, thread, body.
+- onSubmit: optional callback receiving the form state.
+
+Form State
+- title: string.
+- thread: string.
+- body: string.
+
+Default Empty State
+- title: "".
+- thread: "".
+- body: "".
+
+Thread Loading Behavior
+- On mount, fetch "http://localhost:8080/api/threads".
+- If successful, normalize the result into thread options.
+- If failed, use fallback thread options:
+  - General
+  - Questions
+  - Show and Tell
+- Loading state controls select placeholder:
+  - "Loading threads..." while loading.
+  - "Select a thread" after loading.
+- Ignore async result after unmount.
+
+Thread Option Normalization
+- API payload may be:
+  - array,
+  - object with threads,
+  - object with data,
+  - object with items.
+- Thread may be a string or object.
+- Object id may come from id, threadId, value, or index.
+- Object name may come from name, label, title, or threadName.
+- Invalid options without names are discarded.
+- If none valid, use fallback options.
+
+Fields
+- "Post Title" text input:
+  - id/name: postTitle/title.
+  - required.
+  - controlled by form.title.
+- "Thread" select:
+  - controlled by form.thread.
+  - required status is not explicit in current code, but should be treated as needed for a valid post.
+- "Post Body" textarea:
+  - id/name: postBody/body.
+  - rows: 8.
+  - required.
+  - controlled by form.body.
+
+Submit Behavior
+- Prevent default.
+- Calls onSubmit(form) if onSubmit exists.
+- Current create/edit pages do not pass onSubmit, so no persistence occurs from those pages.
+
+Shared Component: ProfileCard
+Inputs
+- profile: object with username, bloggerSince, bio.
+- showEditAction: boolean, default false.
+- avatarVariant: string, default "blue".
+
+Behavior
+- Displays avatar/fallback derived from first two uppercase letters of username.
+- Displays username.
+- Displays "Blogger since {bloggerSince}".
+- Displays bio text.
+- If showEditAction is true:
+  - Shows an options button rendered as "...".
+  - Button aria-label: "Profile options".
+  - Button aria-expanded reflects menu open state.
+  - Clicking toggles menu.
+  - Menu contains one item: Edit Profile -> "/edit-profile".
+  - Clicking outside closes the menu.
+  - Pressing Escape closes the menu.
+- If showEditAction is false:
+  - No options button.
+  - No edit menu.
+
+Shared Component: AdminEditableList
+Used only in "/admin-profile".
+
+Inputs
+- title: list heading.
+- endpoint: API endpoint for the list.
+- fallbackItems: array of {id, name}.
+- newItemLabel: label for add-item input.
+
+State
+- items: current list.
+- newName: text input for new item.
+- editingId: id of item currently being edited.
+- editingName: temporary value for item edit.
+
+Load Behavior
+- On mount and when endpoint/fallback/title changes:
+  - fetch(endpoint).
+  - If successful, normalize items.
+  - If failed, use fallbackItems.
+  - Ignore async result after unmount.
+
+Item Normalization
+- API payload may be:
+  - array,
+  - object with data,
+  - object with items,
+  - object with mascots,
+  - object with threads.
+- Item may be a string or object.
+- Object id may come from id, mascotId, threadId, value, or index.
+- Object name may come from name, label, title, mascotName, or threadName.
+- Invalid items without a name are discarded.
+- If none valid, use fallbackItems.
+
+Display Behavior
+- Renders an ordered list.
+- Each item displays:
+  - 1-based index followed by a period.
+  - item name, unless currently editing.
+  - edit button, unless currently editing.
+- Edit button:
+  - aria-label: "Edit {item.name}".
+  - Clicking sets editingId and editingName.
+- Editing mode:
+  - Replaces item name with input controlled by editingName.
+  - Shows save button.
+  - Save button aria-label: "Save {item.name}".
+- Save behavior:
+  - Trim editingName.
+  - If empty, do nothing.
+  - PATCH `${endpoint}/${itemId}` with JSON body { name: nextName }.
+  - Regardless of PATCH success/failure, update local item name, clear editingId, clear editingName.
+- Add behavior:
+  - Input is controlled by newName.
+  - Add button aria-label: "Add {newItemLabel}".
+  - Trim newName.
+  - If empty, do nothing.
+  - Create placeholder item with id `placeholder-${Date.now()}` and name nextName.
+  - POST endpoint with JSON body { name: nextName }.
+  - If POST response is ok and JSON can be parsed, normalize returned payload and use it as new item.
+  - Regardless of POST success/failure, append next item locally and clear newName.
+
+PAGE: /links
+Purpose
+- Development/QA page that links to all pages in the application.
+
+Route Behavior
+- "/" redirects to this page.
+- This page is intended to be the app's default home/index route during deployment/testing.
+
+Components
+- Page section.
+- Card/panel with heading "All Pages".
+- Nav labeled "All pages".
+- A list/grid of links.
+
+Links
+- Home -> "/home"
+- Feed -> "/feed"
+- Threads -> "/threads"
+- View Thread -> "/view-thread"
+- Post Details -> "/post-details"
+- My Post Details -> "/my-post-details"
+- My Profile -> "/my-profile"
+- User Profile -> "/user-profile"
+- Admin Profile -> "/admin-profile"
+- Create Post -> "/create-post"
+- Edit Post -> "/edit-post"
+- Edit Profile -> "/edit-profile"
+- Login -> "/login"
+- Register -> "/register"
+- Forgot Password -> "/forgot-password"
+- New Password -> "/new-password"
+- Links -> "/links"
+
+Copy Section
+- Page title: All Pages
+- Link labels: see list above.
+- Route helper text shown per link: the path itself.
+
+PAGE: /home
+Purpose
+- Public landing page for the blog.
+
+Components
+- Hero/intro section.
+- Eyebrow text.
+- Main headline.
+- Supporting paragraph.
+- Create account CTA.
+
+Behavior
+- Create Account button navigates to "/register".
+- No forms or API requests.
+
+Copy Section
+- Eyebrow: Idle Moments
+- Headline: Hobbies, not work.
+- Subheadline: Welcome to Idle Moments, the simple, cozy, hobby only discussion forum. Share your hobbies, not your work.
+- CTA: Create Account
+
+PAGE: /feed
+Purpose
+- Displays a feed of posts.
+- This route intentionally shows the global nav in logged-out mode for testing.
+
+Data
+- Uses usePosts("http://localhost:8080/api/posts").
+- Falls back to fallbackPosts on API failure.
+
+Components
+- Page section.
+- Feed panel/card.
+- Heading "Feed".
+- PostList.
+
+Behavior
+- Each post preview links to "/post-details".
+- Entire highlighted post card area should navigate, except star button.
+- Star button toggles local visual starred state only.
+- No loading/error UI is currently displayed.
+
+Copy Section
+- Page heading: Feed
+- Post copy comes from API or fallback post data.
+
+PAGE: /threads
+Purpose
+- Displays all available discussion threads.
+
+Fallback Thread Data
+- ROBOTS: 3 posts, 6 stars.
+- LEARNING: 3 posts, 6 stars.
+- CODING: 3 posts, 6 stars.
+- SWIMMING: 3 posts, 6 stars.
+
+Data
+- On mount, fetch "http://localhost:8080/api/threads".
+- If response fails or normalizes to empty, use fallback threads.
+
+Thread Normalization
+- Payload may be array or object with threads/data/items.
+- String thread becomes { id: thread, name: thread, posts: 0, stars: 0 }.
+- Object id may come from id, threadId, value, or index.
+- Object name may come from name, label, title, threadName.
+- posts count may come from posts, postCount, totalPosts.
+- stars count may come from stars, starCount, totalStars.
+- Missing numeric values default to 0.
+
+Components
+- Page section.
+- Thread list container.
+- One thread card per thread.
+- Thread name.
+- Post count metric.
+- StarToggleButton.
+
+Behavior
+- Each thread card links to "/view-thread".
+- Entire highlighted thread card area should navigate, except star button.
+- Post count metric is informational only.
+- Star button toggles local visual starred state only.
+
+Copy Section
+- Thread names come from API or fallback thread data.
+
+PAGE: /view-thread
+Purpose
+- Displays one thread detail page and the posts inside that thread.
+
+Fallback Thread
+- id: robots.
+- name: Robots.
+- stars: 6.
+- posts: fallbackPosts.
+
+Data
+- On mount, fetch "http://localhost:8080/api/threads/placeholder-thread".
+- If fetch fails, use fallbackThread.
+
+Thread Normalization
+- Payload may be object with thread, data, or direct thread object.
+- id may come from id or threadId.
+- name may come from name, label, title, threadName.
+- stars may come from stars, starCount, totalStars.
+- posts may come from posts, items, or postList and are normalized via normalizePosts.
+
+Components
+- Page section.
+- Thread detail panel/card.
+- Header containing thread name and StarToggleButton.
+- PostList.
+
+Behavior
+- Thread star toggles local visual state only.
+- Posts link to "/post-details" by default.
+- No loading/error UI is currently displayed.
+
+Copy Section
+- Thread heading comes from API or fallback "Robots".
+- Post copy comes from API or fallback post data.
+
+PAGE: /post-details
+Purpose
+- Displays a public/non-owner post detail page.
+- Supports comments, replies, and owner-only comment deletion for comments by the current user.
+
+Mock Current User
+- username: AndMarsh.
+- color: blue.
+
+Data
+- On mount, fetch "http://localhost:8080/api/posts/placeholder-post" with credentials: "include".
+- If fetch fails, use fallback post and comments imported from my-post-details.
+
+Post Normalization
+- Payload may contain post, data, or direct post object.
+- title defaults to fallback title.
+- authorUsername may come from authorUsername, username, author.username.
+- stars may come from stars or starCount.
+- body may come from body, content, or description.
+- publishedAt may come from publishedAt or createdAt.
+
+Comment Normalization
+- Payload may be array or object with comments, data.comments, or data.
+- If no valid comment array exists, use fallback comments.
+- Parent relationships:
+  - Build a map of comments by id.
+  - Each comment's parent id comes from parentComment.
+  - If parent exists, create replyingTo summary object from parent.
+- Comment fields:
+  - id from id or index.
+  - username from username, authorUsername, author.username, or "unknown".
+  - body from body or content.
+  - publishedAt from publishedAt or createdAt.
+  - color defaults to "blue".
+  - replyingTo is null or summary object.
+
+Components
+- Post article.
+- Header:
+  - title.
+  - "by {authorUsername}".
+  - StarToggleButton.
+- Body text.
+- Published timestamp.
+- Comments section.
+- Comment composer.
+- Comment list.
+- Comment item.
+- Reply target preview.
+- Reply context preview.
+- Comment actions menu for manageable comments.
+
+Comment Composer Behavior
+- Displays current user's avatar marker.
+- Textarea value controlled by commentValue.
+- If no reply target:
+  - Placeholder: "Write comment".
+  - Submit button: "Comment".
+- If replying:
+  - Shows reply target preview.
+  - Preview text: "Reply to @{replyTarget.username}".
+  - Shows target body.
+  - Shows Clear button.
+  - Textarea placeholder: "Write reply".
+  - Submit button: "Reply".
+- Clear button removes replyTarget.
+- Submit prevents default only. It does not currently add a comment.
+
+Reply Behavior
+- Each comment has a Reply button.
+- Clicking Reply:
+  - Sets replyTarget to that comment.
+  - Scrolls composer into view using smooth scroll and center alignment.
+- Reply button is available for every comment.
+
+Reply Context Behavior
+- If a comment is a reply, display a reply context button.
+- Reply context includes:
+  - target author's avatar marker.
+  - target username prefixed with "@".
+  - target body preview.
+- Clicking reply context:
+  - Scrolls to the referenced original comment by id.
+  - After 200ms, sets highlightedCommentId to that id.
+  - Clears highlight after 1400ms.
+
+Comment Action Menu
+- Only comments authored by currentUser.username show the action menu.
+- Menu trigger:
+  - Text: "..."
+  - aria-label: "Actions for {comment.username}'s comment"
+  - aria-expanded reflects menu open state.
+- Menu contains:
+  - Delete Comment button.
+- Delete button does not currently perform deletion.
+- Clicking outside closes the menu.
+- Pressing Escape closes the menu.
+
+Star Behavior
+- Post star toggles local visual state only.
+- Star count does not change.
+
+Copy Section
+- Heading/title comes from API or fallback post.
+- Author byline: "by {authorUsername}".
+- Comments heading: Comments.
+- Composer placeholders:
+  - Write comment.
+  - Write reply.
+- Composer submit labels:
+  - Comment.
+  - Reply.
+- Reply target prefix: Reply to @{username}.
+- Clear reply button: Clear.
+- Reply button: Reply.
+- Comment menu action: Delete Comment.
+
+PAGE: /my-post-details
+Purpose
+- Displays the current user's owned post detail page.
+- Same comment/reply behavior as /post-details, plus post owner edit action and comment menus for all comments.
+
+Fallback Owned Post
+- title: How to Live like a Robot.
+- authorUsername: AndMarsh.
+- stars: 18.
+- body: Robots code all day. And that's what I am doing, but I also go outside sometimes. Who knows I read articles on Medium about API design and I do my classes.
+- publishedAt: 4/13/26 3:23 PM.
+
+Fallback Comments
+- Includes multiple comments and replies with:
+  - id.
+  - username.
+  - body.
+  - publishedAt.
+  - color.
+  - optional replyingTo object.
+- Comments include authors such as robotfan42, beep_beep, AndMarsh, poolnoodle, syntax_error, garden_gnome, byte_sized, capybara_dev, learner_404, quiet_thread, runtime_randy.
+
+Components
+- Post article.
+- Header:
+  - title.
+  - "by {authorUsername}".
+  - StarToggleButton.
+  - PostOwnerMenu.
+- Body text.
+- Published timestamp.
+- Comments section.
+- Comment composer.
+- Comment list.
+- Every comment has CommentMenu.
+
+PostOwnerMenu Behavior
+- Trigger text: "...".
+- Trigger aria-label: "Post actions".
+- aria-expanded reflects open state.
+- Clicking toggles owner menu.
+- Menu contains:
+  - Edit Post -> "/edit-post".
+- Clicking outside closes owner menu.
+- Pressing Escape closes owner menu.
+
+CommentMenu Behavior
+- Every comment shows the comment action menu, regardless of author.
+- Trigger text: "...".
+- Menu action: Delete Comment.
+- Delete Comment currently does not remove the comment.
+- Clicking outside closes menu.
+- Pressing Escape closes menu.
+
+Comment/Reply Behavior
+- Same as /post-details:
+  - Reply button sets reply target and scrolls composer.
+  - Reply context scrolls to referenced comment and temporary highlights it.
+  - Composer submit prevents default only.
+
+Timestamp Behavior
+- Uses formatTimestamp:
+  - If parseable, format as US short date/time.
+  - If not parseable, return original value.
+
+Copy Section
+- Title/body/comment content comes from fallback owned post and comments unless replaced by future API.
+- Byline prefix: by.
+- Comments heading: Comments.
+- Post owner action: Edit Post.
+- Comment action: Delete Comment.
+- Composer placeholders/labels same as /post-details.
+
+PAGE: /my-profile
+Purpose
+- Displays current user's profile and current user's posts.
+
+Profile Data
+- username: AndMarsh.
+- bloggerSince: 3/26.
+- bio: I like capybaras and also I like music. I like rock especially Audioslave.
+
+Posts Data
+- Uses usePosts("http://localhost:8080/api/posts/me").
+- Falls back to fallbackPosts.
+
+Components
+- ProfileCard with showEditAction true.
+- Profile posts panel.
+- Header:
+  - "My Posts".
+  - "Write a new post" link/button.
+- PostList.
+
+Behavior
+- Profile options menu links to "/edit-profile".
+- "Write a new post" navigates to "/create-post".
+- Post cards link to "/post-details" by default.
+- Star toggles are local only.
+
+Copy Section
+- Profile username/bio from profile object.
+- Blogger badge text: Blogger since 3/26.
+- Posts heading: My Posts.
+- New post CTA: Write a new post.
+
+PAGE: /user-profile
+Purpose
+- Displays another user's public profile and posts.
+
+Profile Data
+- id: placeholder-user.
+- username: TrOllRxD.
+- bloggerSince: 5/26.
+- bio: I like capybaras and also I like music. I like rock especially Audioslave.
+
+Posts Data
+- Uses usePosts("http://localhost:8080/api/posts/placeholder-user").
+- Falls back to fallbackPosts.
+
+Components
+- ProfileCard with showEditAction false.
+- Profile posts panel.
+- Header:
+  - "{username}'s Posts".
+- PostList.
+
+Behavior
+- No profile edit menu.
+- Post cards link to "/post-details" by default.
+- Star toggles are local only.
+
+Copy Section
+- Profile username/bio from profile object.
+- Blogger badge text: Blogger since 5/26.
+- Posts heading: TrOllRxD's Posts.
+
+PAGE: /admin-profile
+Purpose
+- Displays current user's profile/posts plus admin controls for editing mascots and threads.
+
+Profile Data
+- Same as current user profile:
+  - username: AndMarsh.
+  - bloggerSince: 3/26.
+  - bio: I like capybaras and also I like music. I like rock especially Audioslave.
+
+Posts Data
+- Uses usePosts("http://localhost:8080/api/posts/me").
+- Falls back to fallbackPosts.
+
+Admin Lists
+- Mascots:
+  - endpoint: "http://localhost:8080/api/mascots".
+  - fallback items: Owl, Hen, Hare, Capybara.
+  - new item label: New Mascot.
+- Threads:
+  - endpoint: "http://localhost:8080/api/threads".
+  - fallback items: Gaming, Swimming, Gardening, Coding.
+  - new item label: New Thread.
+
+Components
+- ProfileCard with showEditAction true.
+- Profile posts panel:
+  - "My Posts".
+  - "Write a new post" link to "/create-post".
+  - PostList.
+- Admin controls panel:
+  - AdminEditableList for Mascots.
+  - AdminEditableList for Threads.
+
+Behavior
+- Profile edit menu links to "/edit-profile".
+- New post link navigates to "/create-post".
+- AdminEditableList handles loading, editing, saving, and adding as described in shared component section.
+
+Copy Section
+- Posts heading: My Posts.
+- New post CTA: Write a new post.
+- Admin section labels:
+  - Mascots.
+  - New Mascot.
+  - Threads.
+  - New Thread.
+
+PAGE: /create-post
+Purpose
+- Allows a logged-in user to compose a new post.
+
+Components
+- PostForm with:
+  - title: Create Post.
+  - submitLabel: Publish.
+
+Behavior
+- Loads thread options from "http://localhost:8080/api/threads".
+- User fills title, selects thread, enters body.
+- Submit prevents default.
+- No persistence occurs because no onSubmit callback is passed.
+
+Copy Section
+- Page/form heading: Create Post.
+- Fields:
+  - Post Title.
+  - Thread.
+  - Post Body.
+- Select placeholders:
+  - Loading threads...
+  - Select a thread.
+- Submit: Publish.
+
+PAGE: /edit-post
+Purpose
+- Allows editing an existing post.
+
+Fallback Post
+- title: How to Live like a Robot.
+- thread: general.
+- body: Robots code all day. And that's what I am doing, but I also go outside sometimes. Who knew fresh air could be useful?
+
+Data
+- On mount, fetch "http://localhost:8080/api/posts/placeholder-post".
+- If successful, normalize fetched post into form values.
+- If failed, use fallback post.
+
+Post Normalization for Edit Form
+- Payload may contain post, data, or direct post object.
+- title may come from title or name.
+- thread may come from threadId, thread.id, thread, or categoryId.
+- body may come from body, content, description, or excerpt.
+
+Components
+- PostForm with:
+  - title: Edit Post.
+  - submitLabel: Save Changes.
+  - initialValues: loaded post.
+
+Behavior
+- The form updates when initialValues changes.
+- Loads thread options independently like create-post.
+- Submit prevents default.
+- No persistence occurs because no onSubmit callback is passed.
+
+Copy Section
+- Page/form heading: Edit Post.
+- Fields:
+  - Post Title.
+  - Thread.
+  - Post Body.
+- Submit: Save Changes.
+
+PAGE: /edit-profile
+Purpose
+- Allows current user to edit profile information.
+
+Fallback Profile
+- username: AndMarsh.
+- email: andmarsh@example.com.
+- mascot: placeholder-1.
+- bio: I like capybaras and also I like music. I like rock especially Audioslave.
+
+Fallback Mascots
+- Mascot option 1.
+- Mascot option 2.
+- Mascot option 3.
+
+Data
+- On mount, fetch "http://localhost:8080/api/users/me".
+- If successful, normalize profile.
+- If failed, use fallbackProfile.
+- Separately, fetch "http://localhost:8080/api/mascots".
+- If successful, normalize mascots.
+- If failed, use fallbackMascots.
+
+Profile Normalization
+- Payload may contain user, profile, data, or direct object.
+- username may come from username or name.
+- email may come from email.
+- mascot may come from mascotId, mascot.id, or mascot.
+- bio may come from bio or description.
+
+Mascot Normalization
+- Payload may be array or object with mascots/data/items.
+- Item may be string or object.
+- id may come from id, mascotId, value, or index.
+- name may come from name, label, title, mascotName.
+
+Fields
+- Username:
+  - id/name: editUsername/username.
+  - autoComplete: username.
+  - required.
+- Email:
+  - type: email.
+  - id/name: editEmail/email.
+  - autoComplete: email.
+  - required.
+- Mascot:
+  - select controlled by form.mascot.
+  - placeholder:
+    - Loading mascots...
+    - Select a mascot.
+- Bio:
+  - textarea.
+  - maxLength 300.
+  - rows 4.
+  - live count displays "{bio.length}/300".
+
+Behavior
+- All fields are controlled.
+- Submit prevents default.
+- No persistence currently occurs.
+- "Change Password" link navigates to "/new-password".
+
+Copy Section
+- Heading: Edit Profile.
+- Fields:
+  - Username.
+  - Email.
+  - Mascot.
+  - Bio.
+- Submit: Save Changes.
+- Helper/link sentence: Want to change your password? Change Password.
+
+PAGE: /login
+Purpose
+- Allows a user to log in.
+
+Fields
+- Username or Email:
+  - id/name: usernameOrEmail.
+  - autoComplete: username.
+  - required.
+- Password:
+  - id/name: loginPassword/password.
+  - autoComplete: current-password.
+  - required.
+  - type toggles between password and text.
+
+State
+- usernameOrEmail.
+- password.
+- showPassword.
+
+Behavior
+- Password visibility button:
+  - aria-label "Show password" when hidden.
+  - aria-label "Hide password" when visible.
+  - Toggles password input type.
+  - Prevents mouse down default to avoid unwanted focus behavior.
+- Forgot password link navigates to "/forgot-password".
+- Submit prevents default.
+- No login API currently called.
+- Register link navigates to "/register".
+
+Copy Section
+- Heading: Login.
+- Fields:
+  - Username or Email.
+  - Password.
+- Link: Forgot password?
+- Submit: Login.
+- Switch text: Don't have an account? Register Here.
+
+PAGE: /register
+Purpose
+- Allows a new user to create an account.
+
+Fields
+- Username:
+  - id/name: username.
+  - autoComplete: username.
+  - required.
+- Email:
+  - id/name: email.
+  - type: email.
+  - autoComplete: email.
+  - required.
+- Mascot:
+  - select controlled by form.mascot.
+  - placeholder Loading mascots... while fetching.
+  - placeholder Select a mascot when loaded.
+- Bio:
+  - textarea.
+  - maxLength 300.
+  - rows 4.
+  - live count displays "{bio.length}/300".
+- Password:
+  - id/name: password.
+  - autoComplete: new-password.
+  - required.
+  - minLength 8.
+  - pattern requires at least one lowercase letter, one uppercase letter, one number, and at least 8 characters.
+  - title explains password requirement.
+- Confirm Password:
+  - id/name: confirmPassword.
+  - autoComplete: new-password.
+  - required.
+
+State
+- form: username, email, mascot, bio, password, confirmPassword.
+- mascots.
+- mascotsLoading.
+- showPassword.
+- showConfirmPassword.
+- passwordFocused.
+
+Mascot Data
+- On mount fetch "http://localhost:8080/api/mascots".
+- If failed, use fallback mascots.
+- Ignore async result after unmount.
+
+Password Requirements Popover
+- Opens when password input is focused.
+- Closes on blur when focus moves outside the password input wrapper.
+- Prevents open/close autofocus side effects.
+- Shows requirements:
+  - At least 8 characters.
+  - One uppercase letter.
+  - One lowercase letter.
+  - At least one number.
+- Each requirement computes live against form.password.
+- Each requirement has a met/unmet indicator.
+
+Password Visibility Behavior
+- Password visibility button toggles password between text/password.
+- Confirm password visibility button toggles confirm password between text/password.
+- Visibility button labels:
+  - Show password / Hide password.
+  - Show confirm password / Hide confirm password.
+
+Submit Behavior
+- Submit prevents default.
+- No registration API currently called.
+
+Copy Section
+- Heading: Register.
+- Fields:
+  - Username.
+  - Email.
+  - Mascot.
+  - Bio.
+  - Password.
+  - Confirm Password.
+- Mascot placeholders:
+  - Loading mascots...
+  - Select a mascot.
+- Password popover title: Password requirements.
+- Password requirement labels:
+  - At least 8 characters.
+  - One uppercase letter.
+  - One lowercase letter.
+  - At least one number.
+- Submit: Register.
+
+PAGE: /forgot-password
+Purpose
+- Allows a user to start account recovery.
+
+Fields
+- Username or Email:
+  - id/name: forgotUsernameOrEmail/usernameOrEmail.
+  - autoComplete: username.
+  - required.
+
+State
+- usernameOrEmail.
+
+Behavior
+- Input is controlled.
+- Submit prevents default.
+- No recovery API currently called.
+
+Copy Section
+- Heading: Forgot Password.
+- Field: Username or Email.
+- Submit: Recover Account.
+
+PAGE: /new-password
+Purpose
+- Allows a logged-in or recovering user to change password.
+
+Fields
+- Old Password:
+  - id/name: oldPassword.
+  - autoComplete: current-password.
+  - required.
+  - type toggles password/text.
+- New Password:
+  - id/name: newPassword.
+  - autoComplete: new-password.
+  - required.
+  - minLength 8.
+  - pattern requires lowercase, uppercase, number, and 8+ characters.
+  - title explains password requirement.
+  - type toggles password/text.
+- Confirm Password:
+  - id/name: confirmPassword.
+  - autoComplete: new-password.
+  - required.
+  - type toggles password/text.
+
+State
+- form: oldPassword, newPassword, confirmPassword.
+- showOldPassword.
+- showNewPassword.
+- showConfirmPassword.
+- newPasswordFocused.
+
+Password Requirements Popover
+- Opens when New Password input is focused.
+- Closes on blur when focus moves outside new password input wrapper.
+- Prevents open/close autofocus side effects.
+- Requirements computed live from form.newPassword:
+  - At least 8 characters.
+  - One uppercase letter.
+  - One lowercase letter.
+  - At least one number.
+
+Password Visibility Behavior
+- Each password field has independent show/hide toggle.
+- Toggle labels:
+  - Show old password / Hide old password.
+  - Show new password / Hide new password.
+  - Show confirm password / Hide confirm password.
+- Buttons prevent mouse down default.
+
+Submit Behavior
+- Submit prevents default.
+- No password API currently called.
+
+Copy Section
+- Heading: New Password.
+- Fields:
+  - Old Password.
+  - New Password.
+  - Confirm Password.
+- Password popover title: Password requirements.
+- Requirement labels:
+  - At least 8 characters.
+  - One uppercase letter.
+  - One lowercase letter.
+  - At least one number.
+- Submit: Change Password.
+
+Accessibility and Interaction Requirements
+- All form fields should have visible labels associated with inputs.
+- Password visibility buttons need descriptive aria-labels that change with state.
+- Star buttons need aria-pressed and action-specific aria-labels.
+- Menus triggered by "..." buttons need aria-expanded.
+- The mobile nav drawer trigger needs aria-expanded, aria-label, and aria-controls.
+- The mobile nav drawer should close on Escape and backdrop click.
+- Menus should close on outside click and Escape.
+- Reply context buttons should be keyboard operable.
+- Full post/thread cards should make the highlighted area clickable while preserving independent star button behavior.
+
+Data/API Endpoint Summary
+- GET http://localhost:8080/api/posts
+  - Used by /feed.
+- GET http://localhost:8080/api/posts/me
+  - Used by /my-profile and /admin-profile.
+- GET http://localhost:8080/api/posts/{profile.id}
+  - Used by /user-profile with placeholder-user.
+- GET http://localhost:8080/api/posts/placeholder-post
+  - Used by /post-details and /edit-post.
+- GET http://localhost:8080/api/threads
+  - Used by /threads and PostForm.
+- GET http://localhost:8080/api/threads/placeholder-thread
+  - Used by /view-thread.
+- GET http://localhost:8080/api/mascots
+  - Used by /register, /edit-profile, and /admin-profile.
+- GET http://localhost:8080/api/users/me
+  - Used by /edit-profile.
+- PATCH {admin list endpoint}/{itemId}
+  - Used by AdminEditableList save.
+  - Body: { name: nextName }.
+- POST {admin list endpoint}
+  - Used by AdminEditableList add.
+  - Body: { name: nextName }.
+
+Important Current Prototype Limitations
+- Most form submissions only call preventDefault and do not persist data.
+- Create Post and Edit Post do not persist because no onSubmit is passed.
+- Login, Register, Forgot Password, New Password, and Edit Profile do not call APIs on submit.
+- Comment submission does not add comments.
+- Delete Comment actions do not delete comments.
+- Star toggles are local visual state only and do not update counts or call APIs.
+- Nav auth state is mocked; only /feed is forced logged out.
+- Many API endpoints point to localhost and are expected to fall back when unavailable.
+
+Implementation Checklist for a Rebuild
+- Create global router with all listed routes.
+- Use basename or equivalent so deployment under "/frontend" works.
+- Render global SiteNav on every route.
+- Implement logged-in/logged-out nav states.
+- Implement mobile drawer with Escape/backdrop/link-close behavior.
+- Implement normalized data loading with fallback data for posts, threads, mascots, profile, and post details.
+- Implement PostList/PostPreview with full-card click target and independent star control.
+- Implement StarToggleButton local state and accessible labels.
+- Implement ProfileCard with optional edit menu.
+- Implement AdminEditableList with load, edit, save, add, and optimistic local update behavior.
+- Implement comment detail pages with reply target, scroll-to-comment, temporary highlight, and action menus.
+- Implement auth/profile/post forms with the exact fields, controlled state, validation attributes, password visibility toggles, password requirement popovers, and submit behavior described above.
+- Include a clear copy-editing area or constants matching each "Copy Section".
